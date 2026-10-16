@@ -1,0 +1,42 @@
+# Every Monday: speed cameras and average speed sections from the OpenStreetMap extracts of Czechia, Slovakia, Poland
+# and Austria (Geofabrik), kept with osmium and written to cameras.csv, which Drive HUD downloads once a week.
+# Commits only when the cameras changed, not just the date.
+name: Radary
+
+on:
+  schedule:
+    - cron: '23 3 * * 1'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [cameras.py, .github/workflows/radary.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  radary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -q && sudo apt-get install -y -q osmium-tool
+      - name: Speed cameras from each country's OpenStreetMap extract
+        run: |
+          for c in czech-republic slovakia poland austria; do
+            curl -sSfL --retry 3 -o $c.osm.pbf https://download.geofabrik.de/europe/$c-latest.osm.pbf
+            osmium tags-filter $c.osm.pbf n/highway=speed_camera r/type=enforcement -o $c.opl --overwrite
+            rm $c.osm.pbf
+          done
+      - run: |
+          python3 cameras.py czech-republic.opl slovakia.opl poland.opl austria.opl > cameras.csv
+          echo "cameras: $(grep -c '^c' cameras.csv), sections: $(grep -c '^s' cameras.csv)"
+      - run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add cameras.csv
+          if git diff --cached --quiet -I '^#'; then
+            echo "No change in the cameras"
+          else
+            git commit -m "Radary k $(date -u +%F)"
+            git push
+          fi
