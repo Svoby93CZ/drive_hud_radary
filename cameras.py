@@ -245,7 +245,8 @@ class Country:
         return None
 
     def sections(self):
-        """[(limit, [points from start to end], whether they follow the roads)] for every average speed section."""
+        """{(start, end): (limit, [points from start to end], whether they follow the roads)} for every average speed
+        section."""
         graph = Graph(self) if self.way_tags else None
         found = {}
         for t, roles in self.enforcement("average_speed"):
@@ -258,7 +259,7 @@ class Country:
             route, ways = graph.route(start, end, prefer) if graph else (None, [])
             limit = speed_limit(t.get("maxspeed")) or (graph.common_limit(ways) if graph else 0)
             found[(start, end)] = (limit, simplify(route) if route else [start, end], route is not None)
-        return list(found.values())
+        return found
 
 
 def watched(found):
@@ -462,13 +463,16 @@ def write_areas(name):
 def main(names):
     countries = [Country(n) for n in names]
     header = f"# {datetime.date.today().isoformat()} {' '.join(names)}\n"
-    old_cameras, old_sections, directions, sections = set(), set(), {}, []
+    old_cameras, old_sections, directions, by_ends = set(), set(), {}, {}
     for c in countries:
         old_cameras |= c.old_cameras()
         old_sections |= c.old_sections()
         for spot, found in c.directions().items():
             directions.setdefault(spot, set()).update(found)
-        sections += c.sections()
+        # A section by a border is in both countries' extracts; the first one's course will do.
+        for ends, section in c.sections().items():
+            by_ends.setdefault(ends, section)
+    sections = list(by_ends.values())
     with open("cameras.csv", "w", encoding="utf-8") as f:
         f.write(header)
         for lat, lon in sorted(old_cameras):
