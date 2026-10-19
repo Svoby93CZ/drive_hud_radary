@@ -278,22 +278,22 @@ def box(points, margin):
 
 
 def merge(boxes):
-    """Overlapping boxes joined into one covering both, until none overlap, as the parts of a multipolygon mustn't."""
-    boxes = list(boxes)
-    merged = True
-    while merged:
-        merged = False
-        for i in range(len(boxes)):
-            for j in range(i + 1, len(boxes)):
-                a, b = boxes[i], boxes[j]
+    """Overlapping boxes joined into one covering both, until none overlap, as the parts of a multipolygon mustn't.
+    Each round sweeps them from south to north; a joined box may reach another, so rounds go on until none joins."""
+    boxes = sorted(boxes)
+    while True:
+        out = []
+        for b in boxes:
+            for i in range(len(out) - 1, -1, -1):
+                a = out[i]
                 if a[0] <= b[2] and b[0] <= a[2] and a[1] <= b[3] and b[1] <= a[3]:
-                    boxes[i] = min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3])
-                    del boxes[j]
-                    merged = True
+                    out[i] = min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3])
                     break
-            if merged:
-                break
-    return boxes
+            else:
+                out.append(b)
+        if len(out) == len(boxes):
+            return out
+        boxes = sorted(out)
 
 
 class Graph:
