@@ -1,6 +1,6 @@
 # Every Monday: speed cameras and average speed sections from the OpenStreetMap extracts of Czechia, Slovakia, Poland
-# and Austria (Geofabrik), kept with osmium and written to cameras.csv, which Drive HUD downloads once a week.
-# Commits only when the cameras changed, not just the date.
+# and Austria (Geofabrik), kept with osmium and written to cameras.csv and cameras2.csv, which Drive HUD downloads once
+# a week. Commits only when the cameras changed, not just the date.
 name: Radary
 
 on:
@@ -20,20 +20,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update -q && sudo apt-get install -y -q osmium-tool
-      - name: Speed cameras from each country's OpenStreetMap extract
+      - name: Speed cameras from each country's OpenStreetMap extract, and the roads around them
         run: |
           for c in czech-republic slovakia poland austria; do
             curl -sSfL --retry 3 -o $c.osm.pbf https://download.geofabrik.de/europe/$c-latest.osm.pbf
             osmium tags-filter $c.osm.pbf n/highway=speed_camera r/type=enforcement -o $c.opl --overwrite
+            # The roads a section's course follows and the camera on a road takes its direction from.
+            python3 cameras.py --areas $c
+            if [ -f $c-areas.geojson ]; then
+              osmium tags-filter $c.osm.pbf -o $c-roads.pbf --overwrite \
+                w/highway=motorway,motorway_link,trunk,trunk_link,primary,primary_link,secondary,secondary_link,tertiary,tertiary_link,unclassified,residential,living_street
+              osmium extract -p $c-areas.geojson $c-roads.pbf -o $c-roads.opl --overwrite
+              rm $c-roads.pbf
+            fi
             rm $c.osm.pbf
           done
-      - run: |
-          python3 cameras.py czech-republic.opl slovakia.opl poland.opl austria.opl > cameras.csv
-          echo "cameras: $(grep -c '^c' cameras.csv), sections: $(grep -c '^s' cameras.csv)"
+      - run: python3 cameras.py czech-republic slovakia poland austria
       - run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add cameras.csv
+          git add cameras.csv cameras2.csv
           if git diff --cached --quiet -I '^#'; then
             echo "No change in the cameras"
           else
